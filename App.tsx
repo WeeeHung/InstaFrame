@@ -59,9 +59,9 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onDrop, on
             htmlFor="file-upload"
         >
             <UploadIcon className="w-8 h-8 mb-2 text-gray-400" />
-            <span className="text-lg">Choose a photo</span>
+            <span className="text-lg">Choose photos</span>
             <span className="text-xs text-gray-500">or drag and drop</span>
-            <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={onImageUpload} />
+            <input id="file-upload" type="file" accept="image/*" className="hidden" onChange={onImageUpload} multiple />
         </label>
     </div>
 );
@@ -112,29 +112,49 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ prompt, setPrompt, aspe
 
 
 interface ImagePreviewProps {
-    formattedImageUrl: string | null;
+    formattedImageUrls: string[];
     isLoading: boolean;
     error: string | null;
 }
 
-const ImagePreview: React.FC<ImagePreviewProps> = ({ formattedImageUrl, isLoading, error }) => (
-    <div className="flex-grow flex items-center justify-center p-4">
-        <div className="w-full max-w-md aspect-square bg-black rounded-lg flex items-center justify-center overflow-hidden border border-gray-700 shadow-lg">
-            {isLoading ? (
+const ImagePreview: React.FC<ImagePreviewProps> = ({ formattedImageUrls, isLoading, error }) => (
+    <div className="flex-grow flex items-center justify-center p-4 min-h-0">
+        <div className="w-full max-w-md aspect-square bg-black rounded-lg flex items-center justify-center overflow-hidden border border-gray-700 shadow-lg relative">
+            {isLoading && formattedImageUrls.length === 0 ? (
                 <div className="flex flex-col items-center text-gray-400">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
-                    <p className="mt-4 text-lg font-semibold">AI is creating...</p>
+                    <p className="mt-4 text-lg font-semibold">Processing images...</p>
                 </div>
             ) : error ? (
                 <div className="text-center text-red-400 p-4">
                     <h3 className="font-bold">Error</h3>
                     <p className="text-sm">{error}</p>
                 </div>
-            ) : formattedImageUrl ? (
-                <img src={formattedImageUrl} alt="Formatted for Instagram" className="max-w-full max-h-full object-contain" />
+            ) : formattedImageUrls.length > 0 ? (
+                 <div className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    {formattedImageUrls.map((url, index) => (
+                        <div key={index} className="w-full h-full flex-shrink-0 snap-center flex flex-col items-center justify-center p-4">
+                             <style>{`::-webkit-scrollbar { display: none; }`}</style>
+                             <img src={url} alt={`Formatted image ${index + 1}`} className="max-w-full max-h-[calc(100%-4rem)] object-contain" />
+                             <a
+                                href={url}
+                                download={`instaframe-ai-image-${index + 1}.png`}
+                                className="mt-4 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-6 rounded-full transition-colors duration-300 flex items-center text-sm"
+                            >
+                                <DownloadIcon className="w-4 h-4 mr-2" />
+                                Download
+                            </a>
+                        </div>
+                    ))}
+                </div>
             ) : (
                 <div className="text-center text-gray-500">
-                    <p>Your formatted image will appear here</p>
+                    <p>Your formatted images will appear here</p>
+                </div>
+            )}
+            {formattedImageUrls.length > 1 && (
+                <div className="absolute bottom-2 right-3 bg-gray-900/50 text-white text-xs font-mono rounded-full px-2 py-1 select-none">
+                    1 / {formattedImageUrls.length}
                 </div>
             )}
         </div>
@@ -143,26 +163,17 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ formattedImageUrl, isLoadin
 
 
 interface FooterActionsProps {
-    formattedImageUrl: string | null;
+    hasImages: boolean;
     onClear: () => void;
 }
 
-const FooterActions: React.FC<FooterActionsProps> = ({ formattedImageUrl, onClear }) => (
+const FooterActions: React.FC<FooterActionsProps> = ({ hasImages, onClear }) => (
     <div className="sticky bottom-0 left-0 right-0 bg-gray-900/80 backdrop-blur-sm p-4 border-t border-gray-700">
         <div className="max-w-md mx-auto flex space-x-3">
-            <a
-                href={formattedImageUrl ?? undefined}
-                download="instaframe-ai-image.png"
-                className={`flex-1 text-center font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center ${formattedImageUrl ? 'bg-pink-600 hover:bg-pink-700 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
-                onClick={(e) => !formattedImageUrl && e.preventDefault()}
-            >
-                <DownloadIcon className="w-5 h-5 mr-2" />
-                Download
-            </a>
             <button
                 onClick={onClear}
-                disabled={!formattedImageUrl}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center"
+                disabled={!hasImages}
+                className="w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center"
             >
                 <ClearIcon className="w-5 h-5 mr-2" />
                 Start Over
@@ -174,8 +185,7 @@ const FooterActions: React.FC<FooterActionsProps> = ({ formattedImageUrl, onClea
 
 export default function App() {
     const [mode, setMode] = useState<Mode>('upload');
-    const [originalImage, setOriginalImage] = useState<string | null>(null);
-    const [formattedImageUrl, setFormattedImageUrl] = useState<string | null>(null);
+    const [formattedImageUrls, setFormattedImageUrls] = useState<string[]>([]);
     const [prompt, setPrompt] = useState<string>('A cute baby sea otter floating on its back');
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -184,90 +194,85 @@ export default function App() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const processAndSetImage = (imageDataUrl: string) => {
-        const image = new Image();
-        image.onload = () => {
-            const canvas = canvasRef.current;
-            if (!canvas) {
-                setError("Canvas element not found.");
-                return;
+    const processImageDataUrl = useCallback((imageDataUrl: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return reject(new Error("Canvas element not found."));
+                
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error("Could not get canvas context."));
+
+                const canvasSize = 1080;
+                canvas.width = canvasSize;
+                canvas.height = canvasSize;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+                const imageAspectRatio = image.width / image.height;
+                let drawWidth, drawHeight;
+                const padding = 0.9; 
+                if (imageAspectRatio > 1) { 
+                    drawWidth = canvasSize * padding;
+                    drawHeight = drawWidth / imageAspectRatio;
+                } else {
+                    drawHeight = canvasSize * padding;
+                    drawWidth = drawHeight * imageAspectRatio;
+                }
+
+                const x = (canvasSize - drawWidth) / 2;
+                const y = (canvasSize - drawHeight) / 2;
+
+                ctx.drawImage(image, x, y, drawWidth, drawHeight);
+                resolve(canvas.toDataURL('image/png'));
             };
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                setError("Could not get canvas context.");
-                return;
-            };
-
-            const canvasSize = 1080; // Instagram square post size
-            canvas.width = canvasSize;
-            canvas.height = canvasSize;
-
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvasSize, canvasSize);
-
-            const imageAspectRatio = image.width / image.height;
-            let drawWidth, drawHeight;
-
-            const padding = 0.9; // 10% border
-            if (imageAspectRatio > 1) { // Landscape
-                drawWidth = canvasSize * padding;
-                drawHeight = drawWidth / imageAspectRatio;
-            } else { // Portrait or square
-                drawHeight = canvasSize * padding;
-                drawWidth = drawHeight * imageAspectRatio;
-            }
-
-            const x = (canvasSize - drawWidth) / 2;
-            const y = (canvasSize - drawHeight) / 2;
-
-            ctx.drawImage(image, x, y, drawWidth, drawHeight);
-            setFormattedImageUrl(canvas.toDataURL('image/png'));
-            setOriginalImage(imageDataUrl);
-            setError(null);
-            setIsLoading(false);
-        };
-        image.onerror = () => {
-            setError("The file could not be loaded as an image. It might be corrupted or in an unsupported format.");
-            setIsLoading(false);
-        };
-        image.src = imageDataUrl;
+            image.onerror = () => reject(new Error("The image file could not be loaded. It may be corrupt or an unsupported format."));
+            image.src = imageDataUrl;
+        });
+    }, []);
+    
+    const readSingleFile = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error("Failed to read the selected file."));
+            reader.readAsDataURL(file);
+        });
     };
 
-    const handleFile = useCallback((file: File | null | undefined) => {
-        if (file) {
-            // Check if the file is an image. This is a crucial step to prevent errors.
-            if (file.type && file.type.startsWith('image/')) {
-                setIsLoading(true);
-                setError(null);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    if (typeof reader.result === 'string') {
-                        processAndSetImage(reader.result);
-                    } else {
-                        setError("Failed to read image data.");
-                        setIsLoading(false);
-                    }
-                };
-                reader.onerror = () => {
-                    setError("Failed to read the selected file.");
-                    setIsLoading(false);
-                };
-                // This is where the error likely occurred. We ensure `file` is a valid File object.
-                reader.readAsDataURL(file);
-            } else {
-                setError("Invalid file type. Please upload an image (e.g., JPEG, PNG, GIF).");
-            }
+    const handleFiles = useCallback(async (files: FileList | null) => {
+        if (!files || files.length === 0) return;
+
+        setIsLoading(true);
+        setError(null);
+        setFormattedImageUrls([]);
+
+        const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        if (imageFiles.length === 0) {
+            setError("No valid image files selected. Please upload JPEG, PNG, or GIF files.");
+            setIsLoading(false);
+            return;
         }
-    }, []);
+
+        try {
+            const imageDataUrls = await Promise.all(imageFiles.map(readSingleFile));
+            const processedUrls = await Promise.all(imageDataUrls.map(processImageDataUrl));
+            setFormattedImageUrls(processedUrls);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "An unknown error occurred during image processing.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [processImageDataUrl]);
 
     const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        handleFile(file);
+        handleFiles(event.target.files);
+        event.target.value = ''; // Allow re-uploading the same file(s)
     };
 
     const handleDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault(); // Necessary to allow drop
+        event.preventDefault();
         setIsDragging(true);
     }, []);
 
@@ -279,9 +284,8 @@ export default function App() {
     const handleDrop = useCallback((event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         setIsDragging(false);
-        const file = event.dataTransfer.files?.[0];
-        handleFile(file);
-    }, [handleFile]);
+        handleFiles(event.dataTransfer.files);
+    }, [handleFiles]);
 
     const handleGenerate = async () => {
         if (!prompt) {
@@ -290,35 +294,28 @@ export default function App() {
         }
         setIsLoading(true);
         setError(null);
-        setFormattedImageUrl(null);
-        setOriginalImage(null);
-
+        
         try {
             const generatedDataUrl = await generateImage(prompt, aspectRatio);
-            processAndSetImage(generatedDataUrl);
+            const formattedUrl = await processImageDataUrl(generatedDataUrl);
+            setFormattedImageUrls(prev => [...prev, formattedUrl]);
         } catch (e) {
             setError(e instanceof Error ? e.message : "An unknown error occurred during image generation.");
+        } finally {
             setIsLoading(false);
         }
     };
 
     const handleClear = () => {
-        setOriginalImage(null);
-        setFormattedImageUrl(null);
+        setFormattedImageUrls([]);
         setError(null);
         setIsLoading(false);
-        setPrompt('A cute baby sea otter floating on its back'); // Reset prompt
-        
-        // Reset file input so user can upload the same file again
-        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-        if (fileInput) {
-            fileInput.value = '';
-        }
+        setPrompt('A cute baby sea otter floating on its back');
     };
     
     const handleModeChange = (newMode: Mode) => {
         if (mode !== newMode) {
-            handleClear(); // Clear state when switching modes
+            handleClear();
         }
         setMode(newMode);
     };
@@ -329,8 +326,8 @@ export default function App() {
             <Header />
             <ModeSelector mode={mode} setMode={handleModeChange} />
             <main className="flex-grow flex flex-col min-h-0">
-                {formattedImageUrl ? (
-                    <ImagePreview formattedImageUrl={formattedImageUrl} isLoading={isLoading} error={error} />
+                {formattedImageUrls.length > 0 ? (
+                    <ImagePreview formattedImageUrls={formattedImageUrls} isLoading={isLoading} error={error} />
                 ) : (
                     <>
                         {mode === 'upload' && (
@@ -352,11 +349,11 @@ export default function App() {
                                 isLoading={isLoading}
                             />
                         )}
-                        <ImagePreview formattedImageUrl={null} isLoading={isLoading} error={error} />
+                        <ImagePreview formattedImageUrls={[]} isLoading={isLoading} error={error} />
                     </>
                 )}
             </main>
-            <FooterActions formattedImageUrl={formattedImageUrl} onClear={handleClear} />
+            <FooterActions hasImages={formattedImageUrls.length > 0} onClear={handleClear} />
             <canvas ref={canvasRef} className="hidden"></canvas>
         </div>
     );
