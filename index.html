@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>InstaFrame AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/react-image-crop/dist/ReactCrop.css" />
     <style>
       /* For custom scrollbar aesthetics */
       ::-webkit-scrollbar {
@@ -21,6 +21,9 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #5a5a5a;
       }
+      .ReactCrop__crop-selection {
+        border: 2px dashed rgba(255, 255, 255, 0.7);
+      }
     </style>
   <script type="importmap">
 {
@@ -28,7 +31,8 @@
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.26.0",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-image-crop": "https://esm.sh/react-image-crop@11.0.5"
   }
 }
 </script>

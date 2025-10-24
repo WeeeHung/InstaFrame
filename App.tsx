@@ -1,52 +1,68 @@
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import ReactCrop, { type Crop, type PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 
-import React, { useState, useRef, useCallback } from 'react';
 import { AspectRatio } from './types';
 import { generateImage } from './services/geminiService';
-import { UploadIcon, SparklesIcon, DownloadIcon, ClearIcon } from './components/icons';
+import { UploadIcon, SparklesIcon, DownloadIcon, ClearIcon, CropIcon } from './components/icons';
 
 type Mode = 'upload' | 'generate';
 
+interface ImageState {
+    id: string;
+    originalSrc: string;
+    formattedSrc: string;
+}
+
 const aspectRatios: AspectRatio[] = ["1:1", "3:4", "4:3", "9:16", "16:9"];
 
+const cropAspectRatios: { label: string; value: number | undefined }[] = [
+    { label: 'Free', value: undefined },
+    { label: '1:1', value: 1 / 1 },
+    { label: '4:3', value: 4 / 3 },
+    { label: '3:4', value: 3 / 4 },
+    { label: '16:9', value: 16 / 9 },
+    { label: '9:16', value: 9 / 16 },
+];
+
 const Header: React.FC = () => (
-  <header className="text-center p-4 border-b border-gray-700">
-    <h1 className="text-3xl font-bold text-white tracking-tight">
-      Insta<span className="text-pink-500">Frame</span> AI
-    </h1>
-    <p className="text-gray-400 text-sm mt-1">Format & Generate Images for Instagram</p>
-  </header>
+    <header className="text-center p-4 border-b border-gray-700">
+        <h1 className="text-3xl font-bold text-white tracking-tight">
+            Insta<span className="text-pink-500">Frame</span> AI
+        </h1>
+        <p className="text-gray-400 text-sm mt-1">Format & Generate Images for Instagram</p>
+    </header>
 );
 
 interface ModeSelectorProps {
-  mode: Mode;
-  setMode: (mode: Mode) => void;
+    mode: Mode;
+    setMode: (mode: Mode) => void;
 }
 
 const ModeSelector: React.FC<ModeSelectorProps> = ({ mode, setMode }) => (
-  <div className="flex justify-center p-4">
-    <div className="flex space-x-2 bg-gray-800 rounded-full p-1">
-      <button
-        onClick={() => setMode('upload')}
-        className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors duration-300 ${mode === 'upload' ? 'bg-pink-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-      >
-        Upload
-      </button>
-      <button
-        onClick={() => setMode('generate')}
-        className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors duration-300 ${mode === 'generate' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-      >
-        Generate
-      </button>
+    <div className="flex justify-center p-4">
+        <div className="flex space-x-2 bg-gray-800 rounded-full p-1">
+            <button
+                onClick={() => setMode('upload')}
+                className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors duration-300 ${mode === 'upload' ? 'bg-pink-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+            >
+                Upload
+            </button>
+            <button
+                onClick={() => setMode('generate')}
+                className={`px-6 py-2 text-sm font-semibold rounded-full transition-colors duration-300 ${mode === 'generate' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+            >
+                Generate
+            </button>
+        </div>
     </div>
-  </div>
 );
 
 interface ImageUploaderProps {
-  onImageUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onDrop: (event: React.DragEvent<HTMLElement>) => void;
-  onDragOver: (event: React.DragEvent<HTMLElement>) => void;
-  onDragLeave: (event: React.DragEvent<HTMLElement>) => void;
-  isDragging: boolean;
+    onImageUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    onDrop: (event: React.DragEvent<HTMLElement>) => void;
+    onDragOver: (event: React.DragEvent<HTMLElement>) => void;
+    onDragLeave: (event: React.DragEvent<HTMLElement>) => void;
+    isDragging: boolean;
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onDrop, onDragOver, onDragLeave, isDragging }) => (
@@ -65,7 +81,6 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onDrop, on
         </label>
     </div>
 );
-
 
 interface ImageGeneratorProps {
     prompt: string;
@@ -110,57 +125,86 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ prompt, setPrompt, aspe
     </div>
 );
 
-
 interface ImagePreviewProps {
-    formattedImageUrls: string[];
+    images: ImageState[];
     isLoading: boolean;
     error: string | null;
+    onCrop: (id: string) => void;
+    currentImageIndex: number;
+    setCurrentImageIndex: (index: number) => void;
 }
 
-const ImagePreview: React.FC<ImagePreviewProps> = ({ formattedImageUrls, isLoading, error }) => (
-    <div className="flex-grow flex items-center justify-center p-4 min-h-0">
-        <div className="w-full max-w-md aspect-square bg-black rounded-lg flex items-center justify-center overflow-hidden border border-gray-700 shadow-lg relative">
-            {isLoading && formattedImageUrls.length === 0 ? (
-                <div className="flex flex-col items-center text-gray-400">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
-                    <p className="mt-4 text-lg font-semibold">Processing images...</p>
-                </div>
-            ) : error ? (
-                <div className="text-center text-red-400 p-4">
-                    <h3 className="font-bold">Error</h3>
-                    <p className="text-sm">{error}</p>
-                </div>
-            ) : formattedImageUrls.length > 0 ? (
-                 <div className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {formattedImageUrls.map((url, index) => (
-                        <div key={index} className="w-full h-full flex-shrink-0 snap-center flex flex-col items-center justify-center p-4">
-                             <style>{`::-webkit-scrollbar { display: none; }`}</style>
-                             <img src={url} alt={`Formatted image ${index + 1}`} className="max-w-full max-h-[calc(100%-4rem)] object-contain" />
-                             <a
-                                href={url}
-                                download={`instaframe-ai-image-${index + 1}.png`}
-                                className="mt-4 bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-6 rounded-full transition-colors duration-300 flex items-center text-sm"
-                            >
-                                <DownloadIcon className="w-4 h-4 mr-2" />
-                                Download
-                            </a>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center text-gray-500">
-                    <p>Your formatted images will appear here</p>
-                </div>
-            )}
-            {formattedImageUrls.length > 1 && (
-                <div className="absolute bottom-2 right-3 bg-gray-900/50 text-white text-xs font-mono rounded-full px-2 py-1 select-none">
-                    1 / {formattedImageUrls.length}
-                </div>
-            )}
-        </div>
-    </div>
-);
+const ImagePreview: React.FC<ImagePreviewProps> = ({ images, isLoading, error, onCrop, currentImageIndex, setCurrentImageIndex }) => {
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+    const handleScroll = useCallback(() => {
+        if (scrollContainerRef.current) {
+            const { scrollLeft, clientWidth } = scrollContainerRef.current;
+            const index = Math.round(scrollLeft / clientWidth);
+            if (index !== currentImageIndex) {
+                setCurrentImageIndex(index);
+            }
+        }
+    }, [currentImageIndex, setCurrentImageIndex]);
+    
+    useEffect(() => {
+        const scroller = scrollContainerRef.current;
+        if (scroller) {
+            scroller.addEventListener('scroll', handleScroll, { passive: true });
+            return () => scroller.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll]);
+
+    return (
+        <div className="flex-grow flex items-center justify-center p-4 min-h-0">
+            <div className="w-full max-w-md aspect-square bg-black rounded-lg flex items-center justify-center overflow-hidden border border-gray-700 shadow-lg relative">
+                {isLoading && images.length === 0 ? (
+                    <div className="flex flex-col items-center text-gray-400">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+                        <p className="mt-4 text-lg font-semibold">Processing images...</p>
+                    </div>
+                ) : error ? (
+                    <div className="text-center text-red-400 p-4">
+                        <h3 className="font-bold">Error</h3>
+                        <p className="text-sm">{error}</p>
+                    </div>
+                ) : images.length > 0 ? (
+                    <div ref={scrollContainerRef} className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <style>{`::-webkit-scrollbar { display: none; }`}</style>
+                        {images.map((image, index) => (
+                            <div key={image.id} className="w-full h-full flex-shrink-0 snap-center flex flex-col items-center justify-center p-2">
+                                <img src={image.formattedSrc} alt={`Formatted image ${index + 1}`} className="max-w-full max-h-[calc(100%-4.5rem)] object-contain" />
+                                <div className="flex items-center space-x-3 mt-4">
+                                    <button onClick={() => onCrop(image.id)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-full transition-colors duration-300 flex items-center text-sm">
+                                        <CropIcon className="w-4 h-4 mr-2" />
+                                        Crop
+                                    </button>
+                                    <a
+                                        href={image.formattedSrc}
+                                        download={`instaframe-ai-image-${index + 1}.png`}
+                                        className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-6 rounded-full transition-colors duration-300 flex items-center text-sm"
+                                    >
+                                        <DownloadIcon className="w-4 h-4 mr-2" />
+                                        Download
+                                    </a>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center text-gray-500">
+                        <p>Your formatted images will appear here</p>
+                    </div>
+                )}
+                {images.length > 1 && (
+                    <div className="absolute bottom-2 right-3 bg-gray-900/50 text-white text-xs font-mono rounded-full px-2 py-1 select-none">
+                        {currentImageIndex + 1} / {images.length}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 interface FooterActionsProps {
     hasImages: boolean;
@@ -182,19 +226,55 @@ const FooterActions: React.FC<FooterActionsProps> = ({ hasImages, onClear }) => 
     </div>
 );
 
+function getCroppedImg(image: HTMLImageElement, crop: PixelCrop): string {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    throw new Error('Could not get canvas context for cropping.');
+  }
+
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+
+  canvas.width = Math.floor(crop.width * scaleX);
+  canvas.height = Math.floor(crop.height * scaleY);
+
+  ctx.drawImage(
+    image,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  return canvas.toDataURL('image/png');
+}
+
 
 export default function App() {
     const [mode, setMode] = useState<Mode>('upload');
-    const [formattedImageUrls, setFormattedImageUrls] = useState<string[]>([]);
+    const [images, setImages] = useState<ImageState[]>([]);
     const [prompt, setPrompt] = useState<string>('A cute baby sea otter floating on its back');
     const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
-
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    
+    // Cropping State
+    const [croppingImage, setCroppingImage] = useState<ImageState | null>(null);
+    const [crop, setCrop] = useState<Crop>();
+    const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+    const [cropAspectRatio, setCropAspectRatio] = useState<number | undefined>(undefined);
+    const imgRef = useRef<HTMLImageElement>(null);
 
-    const processImageDataUrl = useCallback((imageDataUrl: string): Promise<string> => {
+    const addBorderToImage = useCallback((imageDataUrl: string): Promise<string> => {
         return new Promise((resolve, reject) => {
             const image = new Image();
             image.onload = () => {
@@ -211,15 +291,9 @@ export default function App() {
                 ctx.fillRect(0, 0, canvasSize, canvasSize);
 
                 const imageAspectRatio = image.width / image.height;
-                let drawWidth, drawHeight;
-                const padding = 0.9; 
-                if (imageAspectRatio > 1) { 
-                    drawWidth = canvasSize * padding;
-                    drawHeight = drawWidth / imageAspectRatio;
-                } else {
-                    drawHeight = canvasSize * padding;
-                    drawWidth = drawHeight * imageAspectRatio;
-                }
+                const padding = 0.9;
+                let drawWidth = image.width > image.height ? canvasSize * padding : (canvasSize * padding) * imageAspectRatio;
+                let drawHeight = image.width > image.height ? (canvasSize * padding) / imageAspectRatio : canvasSize * padding;
 
                 const x = (canvasSize - drawWidth) / 2;
                 const y = (canvasSize - drawHeight) / 2;
@@ -227,11 +301,29 @@ export default function App() {
                 ctx.drawImage(image, x, y, drawWidth, drawHeight);
                 resolve(canvas.toDataURL('image/png'));
             };
-            image.onerror = () => reject(new Error("The image file could not be loaded. It may be corrupt or an unsupported format."));
+            image.onerror = () => reject(new Error("The image file could not be loaded."));
             image.src = imageDataUrl;
         });
     }, []);
-    
+
+    const processAndAddImages = useCallback(async (imageDataUrls: string[]) => {
+        try {
+            const newImages: ImageState[] = await Promise.all(
+                imageDataUrls.map(async (url) => {
+                    const formattedSrc = await addBorderToImage(url);
+                    return {
+                        id: self.crypto.randomUUID(),
+                        originalSrc: url,
+                        formattedSrc,
+                    };
+                })
+            );
+            setImages(prev => [...prev, ...newImages]);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "An unknown error occurred during image processing.");
+        }
+    }, [addBorderToImage]);
+
     const readSingleFile = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -243,118 +335,173 @@ export default function App() {
 
     const handleFiles = useCallback(async (files: FileList | null) => {
         if (!files || files.length === 0) return;
-
         setIsLoading(true);
         setError(null);
-        setFormattedImageUrls([]);
+        setImages([]);
+        setCurrentImageIndex(0);
 
         const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
         if (imageFiles.length === 0) {
-            setError("No valid image files selected. Please upload JPEG, PNG, or GIF files.");
+            setError("No valid image files selected.");
             setIsLoading(false);
             return;
         }
 
         try {
             const imageDataUrls = await Promise.all(imageFiles.map(readSingleFile));
-            const processedUrls = await Promise.all(imageDataUrls.map(processImageDataUrl));
-            setFormattedImageUrls(processedUrls);
+            await processAndAddImages(imageDataUrls);
         } catch (e) {
             setError(e instanceof Error ? e.message : "An unknown error occurred during image processing.");
         } finally {
             setIsLoading(false);
         }
-    }, [processImageDataUrl]);
+    }, [processAndAddImages]);
 
-    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        handleFiles(event.target.files);
-        event.target.value = ''; // Allow re-uploading the same file(s)
-    };
-
-    const handleDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault();
-        setIsDragging(true);
-    }, []);
-
-    const handleDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault();
-        setIsDragging(false);
-    }, []);
-
-    const handleDrop = useCallback((event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault();
-        setIsDragging(false);
-        handleFiles(event.dataTransfer.files);
-    }, [handleFiles]);
+    const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => { handleFiles(event.target.files); event.target.value = ''; };
+    const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => { e.preventDefault(); setIsDragging(true); }, []);
+    const handleDragLeave = useCallback((e: React.DragEvent<HTMLElement>) => { e.preventDefault(); setIsDragging(false); }, []);
+    const handleDrop = useCallback((e: React.DragEvent<HTMLElement>) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }, [handleFiles]);
 
     const handleGenerate = async () => {
-        if (!prompt) {
-            setError("Please enter a prompt to generate an image.");
-            return;
-        }
+        if (!prompt) return;
         setIsLoading(true);
         setError(null);
-        
         try {
             const generatedDataUrl = await generateImage(prompt, aspectRatio);
-            const formattedUrl = await processImageDataUrl(generatedDataUrl);
-            setFormattedImageUrls(prev => [...prev, formattedUrl]);
+            await processAndAddImages([generatedDataUrl]);
+            setCurrentImageIndex(images.length);
         } catch (e) {
-            setError(e instanceof Error ? e.message : "An unknown error occurred during image generation.");
+            setError(e instanceof Error ? e.message : "An unknown error during generation.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleClear = () => {
-        setFormattedImageUrls([]);
-        setError(null);
-        setIsLoading(false);
-        setPrompt('A cute baby sea otter floating on its back');
-    };
+    const handleClear = () => { setImages([]); setError(null); setIsLoading(false); setCurrentImageIndex(0); setPrompt('A cute baby sea otter floating on its back'); };
+    const handleModeChange = (newMode: Mode) => { if (mode !== newMode) handleClear(); setMode(newMode); };
     
-    const handleModeChange = (newMode: Mode) => {
-        if (mode !== newMode) {
-            handleClear();
+    const handleCropClick = (id: string) => {
+        const imageToCrop = images.find(img => img.id === id);
+        if (imageToCrop) {
+            setCroppingImage(imageToCrop);
+            setCropAspectRatio(undefined);
+            setCrop(undefined); // Reset crop on open
         }
-        setMode(newMode);
     };
 
+    function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+        const { width, height } = e.currentTarget;
+        const newCrop = centerCrop(
+            makeAspectCrop(
+                {
+                    unit: '%',
+                    width: 90,
+                },
+                cropAspectRatio || width / height,
+                width,
+                height
+            ),
+            width,
+            height
+        );
+        setCrop(newCrop);
+    }
+    
+    const handleApplyCrop = async () => {
+        if (!croppingImage || !completedCrop || !imgRef.current) return;
+        
+        if (completedCrop.width === 0 || completedCrop.height === 0) {
+             setCroppingImage(null);
+             return;
+        }
+
+        setIsLoading(true);
+        try {
+            const croppedImageUrl = getCroppedImg(imgRef.current, completedCrop);
+            const newlyFormattedUrl = await addBorderToImage(croppedImageUrl);
+            setImages(prevImages => prevImages.map(img => 
+                img.id === croppingImage.id 
+                ? { ...img, formattedSrc: newlyFormattedUrl, originalSrc: croppedImageUrl } 
+                : img
+            ));
+            setCroppingImage(null);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to apply crop.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (imgRef.current) {
+            onImageLoad({ currentTarget: imgRef.current } as React.SyntheticEvent<HTMLImageElement>);
+        }
+    }, [cropAspectRatio]);
 
     return (
-        <div className="bg-gray-900 text-white min-h-screen flex flex-col font-sans">
-            <Header />
-            <ModeSelector mode={mode} setMode={handleModeChange} />
-            <main className="flex-grow flex flex-col min-h-0">
-                {formattedImageUrls.length > 0 ? (
-                    <ImagePreview formattedImageUrls={formattedImageUrls} isLoading={isLoading} error={error} />
-                ) : (
-                    <>
-                        {mode === 'upload' && (
-                            <ImageUploader
-                                onImageUpload={handleImageUpload}
-                                onDrop={handleDrop}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                isDragging={isDragging}
+        <>
+            <div className="bg-gray-900 text-white min-h-screen flex flex-col font-sans">
+                <Header />
+                <ModeSelector mode={mode} setMode={handleModeChange} />
+                <main className="flex-grow flex flex-col min-h-0">
+                    {images.length > 0 ? (
+                        <ImagePreview images={images} isLoading={isLoading} error={error} onCrop={handleCropClick} currentImageIndex={currentImageIndex} setCurrentImageIndex={setCurrentImageIndex} />
+                    ) : (
+                        <>
+                            {mode === 'upload' && <ImageUploader onImageUpload={handleImageUpload} onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave} isDragging={isDragging} />}
+                            {mode === 'generate' && <ImageGenerator prompt={prompt} setPrompt={setPrompt} aspectRatio={aspectRatio} setAspectRatio={setAspectRatio} onGenerate={handleGenerate} isLoading={isLoading} />}
+                            <ImagePreview images={[]} isLoading={isLoading} error={error} onCrop={()=>{}} currentImageIndex={0} setCurrentImageIndex={()=>{}} />
+                        </>
+                    )}
+                </main>
+                <FooterActions hasImages={images.length > 0} onClear={handleClear} />
+                <canvas ref={canvasRef} className="hidden"></canvas>
+            </div>
+            {croppingImage && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex flex-col p-4 backdrop-blur-sm">
+                    <div className="relative flex-grow flex items-center justify-center">
+                       <ReactCrop
+                            crop={crop}
+                            onChange={(_, percentCrop) => setCrop(percentCrop)}
+                            onComplete={(c) => setCompletedCrop(c)}
+                            aspect={cropAspectRatio}
+                            className="max-h-full"
+                        >
+                            <img
+                                ref={imgRef}
+                                src={croppingImage.originalSrc}
+                                onLoad={onImageLoad}
+                                style={{ maxHeight: '70vh', objectFit: 'contain' }}
+                                alt="Image to crop"
                             />
-                        )}
-                        {mode === 'generate' && (
-                            <ImageGenerator
-                                prompt={prompt}
-                                setPrompt={setPrompt}
-                                aspectRatio={aspectRatio}
-                                setAspectRatio={setAspectRatio}
-                                onGenerate={handleGenerate}
-                                isLoading={isLoading}
-                            />
-                        )}
-                        <ImagePreview formattedImageUrls={[]} isLoading={isLoading} error={error} />
-                    </>
-                )}
-            </main>
-            <FooterActions hasImages={formattedImageUrls.length > 0} onClear={handleClear} />
-            <canvas ref={canvasRef} className="hidden"></canvas>
-        </div>
+                        </ReactCrop>
+                    </div>
+                    <div className="py-4 space-y-4">
+                         <div className="space-y-2">
+                            <label className="block text-center text-sm font-medium text-gray-400">Crop Aspect Ratio</label>
+                            <div className="flex justify-center flex-wrap gap-2 px-4">
+                                {cropAspectRatios.map(({ label, value }) => (
+                                    <button
+                                        key={label}
+                                        onClick={() => setCropAspectRatio(value)}
+                                        className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 ${
+                                            cropAspectRatio === value
+                                                ? 'bg-pink-600 text-white shadow-lg'
+                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex justify-center space-x-4">
+                            <button onClick={() => setCroppingImage(null)} className="px-8 py-3 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors">Cancel</button>
+                            <button onClick={handleApplyCrop} className="px-8 py-3 bg-pink-600 hover:bg-pink-700 rounded-lg font-semibold transition-colors">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }
